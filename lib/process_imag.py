@@ -143,7 +143,7 @@ def replace_circle(img_path: str,  poster_path: str, output_folder: str, old_tex
 
     # Removing the file after processing
     os.remove(poster_path)
-    os.remove(img_path)
+    # os.remove(img_path)
 
     return {"Output": output_folder, "status": "true"}
 
