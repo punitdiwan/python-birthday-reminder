@@ -180,12 +180,23 @@ def post_on_facebook() -> dict:
     url = "https://graph.facebook.com/v23.0/551948654675653/photos"
 
     payload = {
-        "url": "https://www.brainwonders.in/blog_feature_images/2021/09/2021-09-08-12-57-45International_Literacy_Day_Banner_Image.webp",
+        "url": "https://tmpfiles.org/dl/1166201/cleanliness_day.jpg",
         "caption": "Here’s the banner image for International Literacy Day!",
-        "access_token": "EAAaSZCeZATZAKgBPTd5JHCk9PXZCy1QNPush6k2wYXbZAN4Tdj2ZB4o4nklfsB7jZCOQcX60gtq8J60Yf6MGzlM0ZAGxkZCE9E8XfSaBxmr1ovhJHHJ90N8MRgjn1ZCG2P6qsVrBUTFd4QcvMFu9n3W28LwXzhEJZA4VAr3oE2zAfJ2JBGHMbedWy3vgNHzMlBkKni3DS9f3C7gMRFUOvmW9yyeu51R5M3z9hXHzJUkpQ0ElAZDZD"
+        "access_token": "EAAaSZCeZATZAKgBPWkhxmFfzJELZAelWR7TWHuZCjZA4ZBrE6CAZA1a1siiZAUzwPCSvm9Tu9H96PgaSvsPAFVv8okv2Xz4sLrAZBKeBxDrqw6Ptj7aqxEx9Gl5pmodLK5NeVRYJ6J44TfpaXleRML6ghzK8Om6q8ZAiUbdbvyWC455t2V6pgNldd5uNAWgerCiWstmhDDP"
     }
 
     resp = requests.post(url, data=payload)
 
     print(f"Facebook response: {resp.json()}")
+    return resp.json()
+
+
+def upload_file():
+    url = "https://tmpfiles.org/api/v1/upload"
+    file_path = "./cleanliness_day.jpg"
+
+    with open(file_path, "rb") as f:
+        files = {"file": f}
+        resp = requests.post(url, files=files)
+
     return resp.json()
