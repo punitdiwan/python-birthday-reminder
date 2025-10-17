@@ -1,7 +1,18 @@
 from fastapi import FastAPI, UploadFile, File, Form
+import logging
 import os
+import requests
 import shutil
-from lib.process_imag import replace_circle
+from lib.process_imag import replace_circle, capitalize_name, post_on_facebook 
+from lib.db_manager import execute_query
+from dotenv import load_dotenv
+
+# Load variables from .env file into environment
+load_dotenv()
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
 UPLOAD_DIR = "uploads"
@@ -9,28 +20,72 @@ OUTPUT_DIR = "outputs"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
+# Download photo from URL and save locally
+def _downloadPhoto(school_id:str, photo_id: str):
+    url = f"https://schoolerp-bucket.blr1.cdn.digitaloceanspaces.com/supa-img/{school_id}/students/{photo_id}?1758114330329"
+    logger.info(f"Downloading image from URL: {url}")
+    response = requests.get(url, stream=True)
+    if response.status_code == 200:
+        with open(os.path.join(UPLOAD_DIR, photo_id), 'wb') as out_file:
+            shutil.copyfileobj(response.raw, out_file)
+        logger.info("Image downloaded successfully.")
+    else:
+        logger.error("Failed to download image.")
+
+
+async def _get_photos(school_id: str = Form(...)) -> dict:
+    logger.info(f"Received request with school_id: {school_id}")
+
+    # fee_categories = execute_query("SELECT _uid, batches, category_name FROM thekatarahillsschool.finance_fee_categories WHERE is_deleted = %s", (False,))  
+    students = execute_query(f"select full_name, photo, dob from {school_id}.students where is_deleted = false and length(photo) > 0 and TO_CHAR(CAST(dob AS DATE), 'MM-DD') = TO_CHAR(CURRENT_DATE, 'MM-DD')")
+    for student in students:
+        logger.info(f" Student FullName: {student['full_name']}, Student Photo: {student['photo']}, DOB : {student['dob']}")
+        _downloadPhoto(school_id, student['photo'])
+
+    return {"output": students}
+
+# API endpoint to replace circle in image
 @app.post("/replace-circle/")
-async def replace_circle_api( new_text: str = Form(...), base_img: UploadFile = File(...), circle_img: UploadFile = File(...), old_text:str = Form("www.reallygreatsite.com")) -> dict:
-    print(f"Bas File name = {base_img.filename} and overlay file name =  {circle_img}.")
+async def replace_circle_api(school_id: str = Form(...),  poster: UploadFile = File(...), old_text:str = Form("www.reallygreatsite.com")) -> dict:
+    logger.info(f"Received request with school_id: {school_id}, old_text: {old_text}")
+    
+     # Save base image
+    with open(f"{UPLOAD_DIR}/saved_{poster.filename}", "wb") as f:
+        shutil.copyfileobj(poster.file, f)
 
-    base_path = os.path.join(UPLOAD_DIR, base_img.filename)
-    circle_path = os.path.join(UPLOAD_DIR, circle_img.filename)
-    output_path = os.path.join(OUTPUT_DIR, f"result_{base_img.filename}")
+    # Fetch Students image who has birthday today
+    students = await _get_photos(school_id)
+    if not students['output']:
+        return {"output": "No students with birthdays today."}
+  
+    # Process each student photo
+    results = []
+    print(f"Students with birthdays today: {os.path.join(UPLOAD_DIR,students['output'][0]['photo'])}")
+    for student in students['output']:
+         student_photo_path = os.path.join(UPLOAD_DIR, student['photo'])
+         try:
+            result = replace_circle(
+                student_photo_path,
+                f"{UPLOAD_DIR}/saved_{poster.filename}",
+                OUTPUT_DIR,
+                old_text,
+                capitalize_name(student['full_name'])
+            )
+            results.append({"student": student['full_name'], "result": result})
+         except Exception as e:
+             logger.error(f"Error processing {student['photo']}: {e}")
+             results.append({"student": student['full_name'], "error": str(e)})
+    
+    return {"output": results}
 
-    # Save base image
-    with open(f"{UPLOAD_DIR}/saved_{base_img.filename}", "wb") as f:
-        shutil.copyfileobj(base_img.file, f)
+@app.post("/post-on-facebook/")
+async def post_on_facebook_api() -> dict:
+    logger.info("Received request to post on Facebook")
+    try:
+        response = post_on_facebook()
+        return {"output": response}
+    except Exception as e:
+        logger.error(f"Error posting on Facebook: {e}")
+        return {"error": str(e)}
 
-    # Save circle image
-    with open(f"{UPLOAD_DIR}/saved_{circle_img.filename}", "wb") as f:
-        shutil.copyfileobj(circle_img.file, f)
-
-    result = replace_circle(
-        f"{UPLOAD_DIR}/saved_{circle_img.filename}",
-        f"{UPLOAD_DIR}/saved_{base_img.filename}",
-        output_path,
-        old_text,
-        new_text
-        )
-    return {"output": result}
 

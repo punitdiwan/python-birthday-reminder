@@ -1,4 +1,5 @@
 import cv2
+import requests
 import pytesseract
 import numpy as np
 import os
@@ -37,7 +38,24 @@ def add_name(poster_path:str, output_path:str, old_text:str, new_text:str) -> di
 
     return {"output": output_path}
 
-
+# function to capitalize names
+def capitalize_name(full_name: str) -> str:
+    """
+    Capitalizes the first character of a single word name, or both words if there are two words.
+    Examples:
+        'john' -> 'John'
+        'john doe' -> 'John Doe'
+    """
+    if not full_name:
+        return ''
+    words = full_name.split()
+    if len(words) == 1:
+        return words[0].capitalize()
+    elif len(words) == 2:
+        return f"{words[0].capitalize()} {words[1].capitalize()}"
+    else:
+        # For more than two words, capitalize each word
+        return ' '.join(word.capitalize() for word in words)
 
 def replace_circle(img_path: str,  poster_path: str, output_folder: str, old_text:str, new_text:str ) -> dict:
     """
@@ -139,11 +157,46 @@ def replace_circle(img_path: str,  poster_path: str, output_folder: str, old_tex
         print(f"⚠ Could not find '{old_text}' in the image.")
 
     # --- Step 5: Save and cleanup ---
-    pil_img.save(output_folder, format="PNG")
+    print(f"Saving output to {output_folder}")
+
+    # Get just the filename without extension
+    file_name = os.path.splitext(os.path.basename(img_path))[0]
+    pil_img.save(f"{output_folder}/{file_name}", format="PNG")
 
     # Removing the file after processing
-    os.remove(poster_path)
-    os.remove(img_path)
+    #os.remove(poster_path)
+    # os.remove(img_path)
 
     return {"Output": output_folder, "status": "true"}
 
+def post_on_facebook() -> dict:
+    page_id = '551948654675653'  # just the numeric ID
+    page_access_token = os.getenv('ACCESS_TOKEN')
+    image_path = 'outputs/1JctfaUEo7T8.png'
+    message = 'Posting an image via Graph API using Python!'
+
+    # Post image to page
+    # url = f"{os.getenv('FACEBOOK_API_URL')}/{page_id}/photos"
+    url = "https://graph.facebook.com/v23.0/551948654675653/photos"
+
+    payload = {
+        "url": "https://tmpfiles.org/dl/1166201/cleanliness_day.jpg",
+        "caption": "Here’s the banner image for International Literacy Day!",
+        "access_token": "EAAaSZCeZATZAKgBPWkhxmFfzJELZAelWR7TWHuZCjZA4ZBrE6CAZA1a1siiZAUzwPCSvm9Tu9H96PgaSvsPAFVv8okv2Xz4sLrAZBKeBxDrqw6Ptj7aqxEx9Gl5pmodLK5NeVRYJ6J44TfpaXleRML6ghzK8Om6q8ZAiUbdbvyWC455t2V6pgNldd5uNAWgerCiWstmhDDP"
+    }
+
+    resp = requests.post(url, data=payload)
+
+    print(f"Facebook response: {resp.json()}")
+    return resp.json()
+
+
+def upload_file():
+    url = "https://tmpfiles.org/api/v1/upload"
+    file_path = "./cleanliness_day.jpg"
+
+    with open(file_path, "rb") as f:
+        files = {"file": f}
+        resp = requests.post(url, files=files)
+
+    return resp.json()
