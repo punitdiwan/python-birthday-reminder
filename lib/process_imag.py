@@ -5,6 +5,7 @@ import numpy as np
 import os
 from PIL import Image, ImageDraw, ImageFont
 from glob import glob
+from lib.facebook_utils import get_page_access_token
 
 
 def add_name(poster_path:str, output_path:str, old_text:str, new_text:str) -> dict :
@@ -178,13 +179,17 @@ from glob import glob
 def post_on_facebook(output_folder="outputs", school_id="testschool"):
     """
     Upload all generated posters from the output folder directly to the Facebook Page.
-    Uses multipart/form-data file upload via Graph API.
+    Uses the page_id and access_token fetched dynamically from the configuration table
+    and fb_pages.json.
     """
-    page_id = "551948654675653"
-    access_token = os.getenv("ACCESS_TOKEN")  # should be stored in .env
+    # 1️⃣ Get page_id and access_token dynamically
+    try:
+        page_id, access_token = get_page_access_token(school_id)
+    except Exception as e:
+        raise Exception(f"❌ Failed to get page credentials: {e}")
 
-    if not access_token:
-        raise Exception("❌ ACCESS_TOKEN not found in environment variables")
+    if not page_id or not access_token:
+        raise Exception("❌ Page ID or Access Token missing")
 
     # Find all images in outputs folder (png/jpg/jpeg)
     image_paths = glob(os.path.join(output_folder, "*.png")) + \
@@ -195,11 +200,12 @@ def post_on_facebook(output_folder="outputs", school_id="testschool"):
         print("⚠ No images found in output folder.")
         return
 
+    # 3️⃣ Upload each poster
     for image_path in image_paths:
-        print(f"📤 Uploading {os.path.basename(image_path)} to Facebook...")
+        print(f"📤 Uploading {os.path.basename(image_path)} to Facebook Page {page_id}...")
 
         fb_url = f"https://graph.facebook.com/v23.0/{page_id}/photos"
-        message = f"🎂 Happy Birthday from {school_id.capitalize()} Family! 🎉"
+        message = f"🎂 Happy Birthday from Our Whole School Family! 🎉"
 
         # Facebook API requires multipart/form-data for direct image uploads
         with open(image_path, "rb") as img_file:
