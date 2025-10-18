@@ -89,3 +89,50 @@ async def post_on_facebook_api() -> dict:
         return {"error": str(e)}
 
 
+if __name__ == "__main__":
+    import argparse
+    from lib.process_imag import replace_circle, capitalize_name, post_on_facebook
+    from lib.db_manager import execute_query
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--run_birthday_pipeline", action="store_true")
+    args = parser.parse_args()
+
+    if args.run_birthday_pipeline:
+        school_id = os.getenv("SCHOOL_ID")
+        if not school_id:
+            print("❌ SCHOOL_ID not found in environment.")
+            exit(1)
+
+        print(f"🎂 Running birthday poster generator for {school_id}")
+
+        # 1️⃣ Fetch students with today's birthday
+        students = execute_query(f"""
+            SELECT full_name, photo, dob 
+            FROM {school_id}.students
+            WHERE is_deleted = false 
+            AND length(photo) > 0
+            AND TO_CHAR(CAST(dob AS DATE), 'MM-DD') = TO_CHAR(CURRENT_DATE, 'MM-DD')
+        """)
+
+        if not students:
+            print(f"ℹ No birthdays today for {school_id}")
+            exit(0)
+
+        poster_path = "poster_template.jpg"  # ensure template exists
+        for student in students:
+            print(f"🎉 {student['full_name']} — {student['dob']}")
+            _downloadPhoto(school_id, student['photo'])
+            result = replace_circle(
+                f"uploads/{student['photo']}",
+                poster_path,
+                "outputs",
+                "www.reallygreatsite.com",
+                capitalize_name(student['full_name'])
+            )
+            print(f"✅ Poster generated: {result}")
+
+        # 2️⃣ Post on Facebook
+        print("📤 Uploading to Facebook...")
+        fb_result = post_on_facebook()
+        print(f"📦 Facebook response: {fb_result}")
