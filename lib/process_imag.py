@@ -4,6 +4,9 @@ import pytesseract
 import numpy as np
 import os
 from PIL import Image, ImageDraw, ImageFont
+from glob import glob
+from lib.facebook_utils import get_page_access_token
+
 
 def add_name(poster_path:str, output_path:str, old_text:str, new_text:str) -> dict :
     image = cv2.imread(poster_path)
@@ -160,8 +163,8 @@ def replace_circle(img_path: str,  poster_path: str, output_folder: str, old_tex
     print(f"Saving output to {output_folder}")
 
     # Get just the filename without extension
-    file_name = os.path.splitext(os.path.basename(img_path))[0]
-    pil_img.save(f"{output_folder}/{file_name}", format="PNG")
+    file_name = os.path.splitext(os.path.basename(img_path))[0] + ".png"
+    pil_img.save(os.path.join(output_folder, file_name), format="PNG")
 
     # Removing the file after processing
     #os.remove(poster_path)
@@ -169,26 +172,61 @@ def replace_circle(img_path: str,  poster_path: str, output_folder: str, old_tex
 
     return {"Output": output_folder, "status": "true"}
 
-def post_on_facebook() -> dict:
-    page_id = '551948654675653'  # just the numeric ID
-    page_access_token = os.getenv('ACCESS_TOKEN')
-    image_path = 'outputs/1JctfaUEo7T8.png'
-    message = 'Posting an image via Graph API using Python!'
+import os
+import requests
+from glob import glob
 
-    # Post image to page
-    # url = f"{os.getenv('FACEBOOK_API_URL')}/{page_id}/photos"
-    url = "https://graph.facebook.com/v23.0/551948654675653/photos"
+def post_on_facebook(output_folder="outputs", school_id="testschool"):
+    """
+    Upload all generated posters from the output folder directly to the Facebook Page.
+    Uses the page_id and access_token fetched dynamically from the configuration table
+    and fb_pages.json.
+    """
+    # 1️⃣ Get page_id and access_token dynamically
+    try:
+        page_id, access_token = get_page_access_token(school_id)
+    except Exception as e:
+        raise Exception(f"❌ Failed to get page credentials: {e}")
 
-    payload = {
-        "url": "https://tmpfiles.org/dl/1166201/cleanliness_day.jpg",
-        "caption": "Here’s the banner image for International Literacy Day!",
-        "access_token": "EAAaSZCeZATZAKgBPWkhxmFfzJELZAelWR7TWHuZCjZA4ZBrE6CAZA1a1siiZAUzwPCSvm9Tu9H96PgaSvsPAFVv8okv2Xz4sLrAZBKeBxDrqw6Ptj7aqxEx9Gl5pmodLK5NeVRYJ6J44TfpaXleRML6ghzK8Om6q8ZAiUbdbvyWC455t2V6pgNldd5uNAWgerCiWstmhDDP"
-    }
+    if not page_id or not access_token:
+        raise Exception("❌ Page ID or Access Token missing")
 
-    resp = requests.post(url, data=payload)
+    # Find all images in outputs folder (png/jpg/jpeg)
+    image_paths = glob(os.path.join(output_folder, "*.png")) + \
+                  glob(os.path.join(output_folder, "*.jpg")) + \
+                  glob(os.path.join(output_folder, "*.jpeg"))
 
-    print(f"Facebook response: {resp.json()}")
-    return resp.json()
+    if not image_paths:
+        print("⚠ No images found in output folder.")
+        return
+
+    # 3️⃣ Upload each poster
+    for image_path in image_paths:
+        print(f"📤 Uploading {os.path.basename(image_path)} to Facebook Page {page_id}...")
+
+        fb_url = f"https://graph.facebook.com/v23.0/{page_id}/photos"
+        message = f"🎂 Happy Birthday from Our Whole School Family! 🎉"
+
+        # Facebook API requires multipart/form-data for direct image uploads
+        with open(image_path, "rb") as img_file:
+            files = {
+                "source": img_file
+            }
+            data = {
+                "caption": message,
+                "access_token": access_token
+            }
+            response = requests.post(fb_url, files=files, data=data)
+
+        try:
+            response.raise_for_status()
+            print(f"✅ Posted successfully: {response.json()}")
+        except Exception as e:
+            print(f"❌ Failed to post {image_path}: {e}")
+            print(f"Response: {response.text}")
+
+    print("🎉 All posters uploaded directly to Facebook!")
+
 
 
 def upload_file():

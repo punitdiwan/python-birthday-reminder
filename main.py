@@ -6,6 +6,7 @@ import shutil
 from lib.process_imag import replace_circle, capitalize_name, post_on_facebook 
 from lib.db_manager import execute_query
 from dotenv import load_dotenv
+from lib.facebook_utils import get_page_access_token
 
 # Load variables from .env file into environment
 load_dotenv()
@@ -31,6 +32,22 @@ def _downloadPhoto(school_id:str, photo_id: str):
         logger.info("Image downloaded successfully.")
     else:
         logger.error("Failed to download image.")
+
+
+def fetch_and_store_pages(user_access_token: str, output_file="fb_pages.json"):
+    """
+    Fetch all pages the user manages and store the response to a JSON file.
+    This should be done only once (or periodically).
+    """
+    fb_url = f"https://graph.facebook.com/v21.0/me/accounts?access_token={user_access_token}"
+    response = requests.get(fb_url)
+    response.raise_for_status()
+
+    with open(output_file, "w") as f:
+        f.write(response.text)
+
+    print(f"✅ Facebook pages stored in {output_file}")
+    return response.json()
 
 
 async def _get_photos(school_id: str = Form(...)) -> dict:
@@ -89,3 +106,55 @@ async def post_on_facebook_api() -> dict:
         return {"error": str(e)}
 
 
+if __name__ == "__main__":
+    import argparse
+    from lib.process_imag import replace_circle, capitalize_name, post_on_facebook
+    from lib.db_manager import execute_query
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--run_birthday_pipeline", action="store_true")
+    args = parser.parse_args()
+
+    if args.run_birthday_pipeline:
+        school_id = os.getenv("SCHOOL_ID")
+        if not school_id:
+            print("❌ SCHOOL_ID not found in environment.")
+            exit(1)
+
+        print(f"🎂 Running birthday poster generator for {school_id}")
+
+        # 1️⃣ Fetch students with today's birthday
+        students = execute_query(f"""
+            SELECT full_name, photo, dob 
+            FROM {school_id}.students
+            WHERE is_deleted = false 
+            AND length(photo) > 0
+            AND TO_CHAR(CAST(dob AS DATE), 'MM-DD') = TO_CHAR(CURRENT_DATE, 'MM-DD')
+        """)
+
+        if not students:
+            print(f"ℹ No birthdays today for {school_id}")
+            exit(0)
+
+        poster_path = "poster_template.jpg"  # ensure template exists
+        for student in students:
+            print(f"🎉 {student['full_name']} — {student['dob']}")
+            _downloadPhoto(school_id, student['photo'])
+            result = replace_circle(
+                f"uploads/{student['photo']}",
+                poster_path,
+                "outputs",
+                "www.reallygreatsite.com",
+                capitalize_name(student['full_name'])
+            )
+            print(f"✅ Poster generated: {result}")
+    # Get Page ID & Access Token for this school
+        page_id, access_token = get_page_access_token(school_id)
+
+    # Post all generated posters
+        post_on_facebook(output_folder="outputs", school_id=school_id)
+
+        # 2️⃣ Post on Facebook
+        print("📤 Uploading to Facebook...")
+        fb_result = post_on_facebook()
+        print(f"📦 Facebook response: {fb_result}")
