@@ -148,13 +148,11 @@ if __name__ == "__main__":
                 capitalize_name(student['full_name'])
             )
             print(f"✅ Poster generated: {result}")
-    # Get Page ID & Access Token for this school
+
+    # ✅ Get Page ID & Access Token for this school
         page_id, access_token = get_page_access_token(school_id)
 
-    # Post all generated posters
-        post_on_facebook(output_folder="outputs", school_id=school_id)
-
-        # 2️⃣ Post on Facebook
+    # ✅ Post all generated posters once
         print("📤 Uploading to Facebook...")
-        fb_result = post_on_facebook()
+        fb_result = post_on_facebook(output_folder="outputs", school_id=school_id)
         print(f"📦 Facebook response: {fb_result}")

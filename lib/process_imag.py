@@ -96,8 +96,7 @@ def replace_circle(img_path: str,  poster_path: str, output_folder: str, old_tex
 
     # Create circular mask
     mask = Image.new("L", (circle_diameter, circle_diameter), 0)
-    draw = ImageDraw.Draw(mask)
-    draw.ellipse((0, 0, circle_diameter, circle_diameter), fill=255)
+    ImageDraw.Draw(mask).ellipse((0, 0, circle_diameter, circle_diameter), fill=255)
 
     # Apply mask to subject
     subject_circle = Image.new("RGBA", (circle_diameter, circle_diameter), (0, 0, 0, 0))
@@ -110,9 +109,7 @@ def replace_circle(img_path: str,  poster_path: str, output_folder: str, old_tex
     template.paste(subject_circle, (top_left_x, top_left_y), subject_circle)
 
     # --- Step 4: OCR text replacement ---
-    # Convert to cv2 again for OCR
-    template_cv = cv2.cvtColor(np.array(template), cv2.COLOR_RGBA2RGB)
-    rgb = cv2.cvtColor(template_cv, cv2.COLOR_BGR2RGB)
+    rgb = cv2.cvtColor(np.array(template), cv2.COLOR_RGBA2RGB)
     results = pytesseract.image_to_data(rgb, output_type=pytesseract.Output.DICT)
 
     pil_img = template.copy()
@@ -136,8 +133,12 @@ def replace_circle(img_path: str,  poster_path: str, output_folder: str, old_tex
             draw.rectangle([x, y, x + w, y + h], fill="white")
 
             # Replace with new text
+            # --- Step 4: Dynamic font scaling ---
+            base_font_size = int(template.width * 0.05)  # 5% of width
+            font_size = max(60, min(base_font_size, 120))  # clamp 60–120 px
+
             try:
-                font = ImageFont.truetype("Roboto-Bold.ttf", 34)
+                font = ImageFont.truetype("Roboto-Bold.ttf", font_size)
             except OSError:
                 font = ImageFont.load_default()
 
@@ -156,21 +157,38 @@ def replace_circle(img_path: str,  poster_path: str, output_folder: str, old_tex
             found = True
             break
 
+    # --- Step 5: Fallback if OCR text not found ---
     if not found:
-        print(f"⚠ Could not find '{old_text}' in the image.")
+        print(f"⚠ Could not find '{old_text}' in the image. Drawing name manually.")
 
-    # --- Step 5: Save and cleanup ---
-    print(f"Saving output to {output_folder}")
+        # Place name near bottom center of image
+        base_font_size = int(template.width * 0.05)
+        font_size = max(60, min(base_font_size, 120))
 
-    # Get just the filename without extension
+        try:
+            font = ImageFont.truetype("Roboto-Bold.ttf", font_size)
+        except OSError:
+            font = ImageFont.load_default()
+
+        text_bbox = draw.textbbox((0, 0), new_text, font=font)
+        text_w = text_bbox[2] - text_bbox[0]
+        text_h = text_bbox[3] - text_bbox[1]
+
+        text_x = (template.width - text_w) // 2
+        text_y = template.height - text_h - 120  # adjust margin
+        draw.text((text_x, text_y), new_text, font=font, fill="black")
+
+    # --- Step 6: Save output ---
     file_name = os.path.splitext(os.path.basename(img_path))[0] + ".png"
-    pil_img.save(os.path.join(output_folder, file_name), format="PNG")
-
+    os.makedirs(output_folder, exist_ok=True)
+    save_path = os.path.join(output_folder, file_name)
+    pil_img.save(save_path, format="PNG")
+    print(f"✅ Saved: {save_path}")
     # Removing the file after processing
     #os.remove(poster_path)
     # os.remove(img_path)
+    return {"Output": save_path, "status": "true"}
 
-    return {"Output": output_folder, "status": "true"}
 
 import os
 import requests
@@ -204,7 +222,7 @@ def post_on_facebook(output_folder="outputs", school_id="testschool"):
     for image_path in image_paths:
         print(f"📤 Uploading {os.path.basename(image_path)} to Facebook Page {page_id}...")
 
-        fb_url = f"https://graph.facebook.com/v23.0/{page_id}/photos"
+        fb_url = f"https://graph.facebook.com/v23.0/{page_id}/feed"
         message = f"🎂 Happy Birthday from Our Whole School Family! 🎉"
 
         # Facebook API requires multipart/form-data for direct image uploads
