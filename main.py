@@ -110,6 +110,7 @@ if __name__ == "__main__":
     import argparse
     from lib.process_imag import replace_circle, capitalize_name, post_on_facebook
     from lib.db_manager import execute_query
+    import shutil
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--run_birthday_pipeline", action="store_true")
@@ -123,36 +124,63 @@ if __name__ == "__main__":
 
         print(f"🎂 Running birthday poster generator for {school_id}")
 
-        # 1️⃣ Fetch students with today's birthday
-        students = execute_query(f"""
-            SELECT full_name, photo, dob 
-            FROM {school_id}.students
-            WHERE is_deleted = false 
-            AND length(photo) > 0
-            AND TO_CHAR(CAST(dob AS DATE), 'MM-DD') = TO_CHAR(CURRENT_DATE, 'MM-DD')
-        """)
+        # Define school-specific folders
+        school_upload_dir = os.path.join(UPLOAD_DIR, school_id)
+        school_output_dir = os.path.join(OUTPUT_DIR, school_id)
 
-        if not students:
-            print(f"ℹ No birthdays today for {school_id}")
-            exit(0)
+        # Cleanup any old files from previous runs
+        for folder in [school_upload_dir, school_output_dir]:
+            if os.path.exists(folder):
+                shutil.rmtree(folder)
+            os.makedirs(folder, exist_ok=True)
 
-        poster_path = "poster_template.jpg"  # ensure template exists
-        for student in students:
-            print(f"🎉 {student['full_name']} — {student['dob']}")
-            _downloadPhoto(school_id, student['photo'])
-            result = replace_circle(
-                f"uploads/{student['photo']}",
-                poster_path,
-                "outputs",
-                "www.reallygreatsite.com",
-                capitalize_name(student['full_name'])
-            )
-            print(f"✅ Poster generated: {result}")
+        try:
+            # 1️⃣ Fetch students with today's birthday
+            students = execute_query(f"""
+                SELECT full_name, photo, dob 
+                FROM {school_id}.students
+                WHERE is_deleted = false 
+                AND length(photo) > 0
+                AND TO_CHAR(CAST(dob AS DATE), 'MM-DD') = TO_CHAR(CURRENT_DATE, 'MM-DD')
+            """)
 
-    # ✅ Get Page ID & Access Token for this school
-        page_id, access_token = get_page_access_token(school_id)
+            if not students:
+                print(f"ℹ No birthdays today for {school_id}")
+                # Cleanup even if no students found
+                shutil.rmtree(school_upload_dir, ignore_errors=True)
+                shutil.rmtree(school_output_dir, ignore_errors=True)
+                exit(0)
 
-    # ✅ Post all generated posters once
-        print("📤 Uploading to Facebook...")
-        fb_result = post_on_facebook(output_folder="outputs", school_id=school_id)
-        print(f"📦 Facebook response: {fb_result}")
+            poster_path = "poster_template.jpg"  # ensure template exists
+
+            for student in students:
+                print(f"🎉 {student['full_name']} — {student['dob']}")
+                _downloadPhoto(school_id, student['photo'])
+                result = replace_circle(
+                    f"{school_upload_dir}/{student['photo']}",
+                    poster_path,
+                    school_output_dir,
+                    "www.reallygreatsite.com",
+                    capitalize_name(student['full_name'])
+                )
+                print(f"✅ Poster generated: {result}")
+
+            # ✅ Get Page ID & Access Token for this school
+            page_id, access_token = get_page_access_token(school_id)
+
+            if not page_id or not access_token:
+                print(f"🚫 No access token for {school_id}. Skipping Facebook upload.")
+            else:
+                print("📤 Uploading to Facebook...")
+                fb_result = post_on_facebook(output_folder=school_output_dir, school_id=school_id)
+                print(f"📦 Facebook response: {fb_result}")
+
+        except Exception as e:
+            print(f"❌ Error processing {school_id}: {e}")
+
+        finally:
+            # 🧹 Always clean up after each school — success or fail
+            shutil.rmtree(school_upload_dir, ignore_errors=True)
+            shutil.rmtree(school_output_dir, ignore_errors=True)
+            print(f"🧹 Cleaned up temporary files for {school_id}")
+
