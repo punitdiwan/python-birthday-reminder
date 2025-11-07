@@ -99,8 +99,8 @@ async def replace_circle_api(school_id: str = Form(...),  poster: UploadFile = F
 async def post_on_facebook_api() -> dict:
     logger.info("Received request to post on Facebook")
     try:
-        response = post_on_facebook()
-        return {"output": response}
+        results = post_on_facebook()          # <-- now returns list of dicts
+        return {"output": results}
     except Exception as e:
         logger.error(f"Error posting on Facebook: {e}")
         return {"error": str(e)}
@@ -156,5 +156,5 @@ if __name__ == "__main__":
 
         # 2️⃣ Post on Facebook
         print("📤 Uploading to Facebook...")
-        fb_result = post_on_facebook()
-        print(f"📦 Facebook response: {fb_result}")
+        # fb_result = post_on_facebook()
+        # print(f"📦 Facebook response: {fb_result}")

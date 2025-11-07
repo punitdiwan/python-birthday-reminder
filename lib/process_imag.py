@@ -175,57 +175,77 @@ def replace_circle(img_path: str,  poster_path: str, output_folder: str, old_tex
 import os
 import requests
 from glob import glob
+from lib.facebook_utils import get_page_access_token
 
-def post_on_facebook(output_folder="outputs", school_id="testschool"):
+
+def post_on_facebook(output_folder: str = "outputs", school_id: str = "testschool") -> list[dict]:
     """
-    Upload all generated posters from the output folder directly to the Facebook Page.
-    Uses the page_id and access_token fetched dynamically from the configuration table
-    and fb_pages.json.
+    Upload **all** generated posters from *output_folder* to the Facebook Page feed.
+    Returns a list of dicts with the Facebook response for each image.
     """
-    # 1️⃣ Get page_id and access_token dynamically
+    # ------------------------------------------------------------------ #
+    # 1. Get Page ID + Access Token (must be a *page* token, not user token)
+    # ------------------------------------------------------------------ #
     try:
         page_id, access_token = get_page_access_token(school_id)
     except Exception as e:
-        raise Exception(f"❌ Failed to get page credentials: {e}")
+        raise RuntimeError(f"Failed to get page credentials: {e}")
 
     if not page_id or not access_token:
-        raise Exception("❌ Page ID or Access Token missing")
+        raise RuntimeError("Page ID or Access Token missing")
 
-    # Find all images in outputs folder (png/jpg/jpeg)
-    image_paths = glob(os.path.join(output_folder, "*.png")) + \
-                  glob(os.path.join(output_folder, "*.jpg")) + \
-                  glob(os.path.join(output_folder, "*.jpeg"))
+    # ------------------------------------------------------------------ #
+    # 2. Gather images
+    # ------------------------------------------------------------------ #
+    image_paths = (
+        glob(os.path.join(output_folder, "*.png"))
+        + glob(os.path.join(output_folder, "*.jpg"))
+        + glob(os.path.join(output_folder, "*.jpeg"))
+    )
 
     if not image_paths:
-        print("⚠ No images found in output folder.")
-        return
+        print("No images found in output folder.")
+        return []
 
-    # 3️⃣ Upload each poster
-    for image_path in image_paths:
-        print(f"📤 Uploading {os.path.basename(image_path)} to Facebook Page {page_id}...")
+    # ------------------------------------------------------------------ #
+    # 3. Upload each image
+    # ------------------------------------------------------------------ #
+    results = []
+    fb_url = f"https://graph.facebook.com/v23.0/{page_id}/photos"
 
-        fb_url = f"https://graph.facebook.com/v23.0/{page_id}/feed"
-        message = f"🎂 Happy Birthday from Our Whole School Family! 🎉"
+    for img_path in image_paths:
+        print(f"Uploading {os.path.basename(img_path)} to Page {page_id}...")
 
-        # Facebook API requires multipart/form-data for direct image uploads
-        with open(image_path, "rb") as img_file:
-            files = {
-                "source": img_file
-            }
+        # ---- multipart payload ------------------------------------------------
+        message = "Happy Birthday from Our Whole School Family!"
+
+        with open(img_path, "rb") as img_file:
+            files = {"file": (os.path.basename(img_path), img_file, "image/png")}
             data = {
-                "caption": message,
-                "access_token": access_token
+                "caption": message,          # caption = feed text
+                "access_token": access_token,
+                "published": "true",         # make sure it appears on the feed
             }
-            response = requests.post(fb_url, files=files, data=data)
 
+            response = requests.post(fb_url, data=data, files=files)
+
+        # ---- handle response ---------------------------------------------------
         try:
             response.raise_for_status()
-            print(f"✅ Posted successfully: {response.json()}")
-        except Exception as e:
-            print(f"❌ Failed to post {image_path}: {e}")
-            print(f"Response: {response.text}")
+            fb_json = response.json()
+            print(f"Posted: {fb_json.get('id')}")
+            results.append({"file": os.path.basename(img_path), "fb": fb_json})
+        except requests.HTTPError as http_err:
+            err_msg = f"HTTP {response.status_code} – {response.text}"
+            print(f"Failed to post {img_path}: {err_msg}")
+            results.append({"file": os.path.basename(img_path), "error": err_msg})
+        except Exception as exc:
+            print(f"Unexpected error for {img_path}: {exc}")
+            results.append({"file": os.path.basename(img_path), "error": str(exc)})
 
-    print("🎉 All posters uploaded directly to Facebook!")
+    print("All posters processed.")
+    return results
+
 
 
 
