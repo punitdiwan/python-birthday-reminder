@@ -258,3 +258,11 @@ def upload_file():
         resp = requests.post(url, files=files)
 
     return resp.json()
+
+import shutil
+
+def reset_output_folder(output_dir: str):
+    """Deletes and recreates the output folder."""
+    if os.path.exists(output_dir):
+        shutil.rmtree(output_dir)
+    os.makedirs(output_dir, exist_ok=True)

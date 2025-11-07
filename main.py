@@ -3,7 +3,7 @@ import logging
 import os
 import requests
 import shutil
-from lib.process_imag import replace_circle, capitalize_name, post_on_facebook 
+from lib.process_imag import replace_circle, capitalize_name, post_on_facebook, reset_output_folder 
 from lib.db_manager import execute_query
 from dotenv import load_dotenv
 from lib.facebook_utils import get_page_access_token
@@ -66,6 +66,8 @@ async def _get_photos(school_id: str = Form(...)) -> dict:
 async def replace_circle_api(school_id: str = Form(...),  poster: UploadFile = File(...), old_text:str = Form("www.reallygreatsite.com")) -> dict:
     logger.info(f"Received request with school_id: {school_id}, old_text: {old_text}")
     
+    reset_output_folder(OUTPUT_DIR)
+
      # Save base image
     with open(f"{UPLOAD_DIR}/saved_{poster.filename}", "wb") as f:
         shutil.copyfileobj(poster.file, f)
@@ -122,6 +124,8 @@ if __name__ == "__main__":
             exit(1)
 
         print(f"🎂 Running birthday poster generator for {school_id}")
+
+        reset_output_folder(OUTPUT_DIR)
 
         # 1️⃣ Fetch students with today's birthday
         students = execute_query(f"""
