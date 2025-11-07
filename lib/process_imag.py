@@ -136,22 +136,30 @@ def replace_circle(img_path: str,  poster_path: str, output_folder: str, old_tex
             draw.rectangle([x, y, x + w, y + h], fill="white")
 
             # Replace with new text
+            # --- Draw larger, readable text ---
             try:
-                font = ImageFont.truetype("Roboto-Bold.ttf", 34)
+                font_size = max(48, int(h * 1.8))  # ensures larger, dynamic text
+                font = ImageFont.truetype("Roboto-Bold.ttf", font_size)
             except OSError:
                 font = ImageFont.load_default()
 
-            # Get text size
+            # Measure new text size
             text_bbox = draw.textbbox((0, 0), new_text, font=font)
             text_w = text_bbox[2] - text_bbox[0]
             text_h = text_bbox[3] - text_bbox[1]
 
-            # Center the text in the rectangle
+            # Center new text where old text was
             text_x = x + (w - text_w) // 2
             text_y = y + (h - text_h) // 2
 
-            # draw.text((x, y), new_text, font=font, fill="black")
-            draw.text((text_x, text_y), new_text, font=font, fill="black")
+            # --- Add shadow/outline for better visibility ---
+            shadow_offset = 2
+            for dx, dy in [(-shadow_offset, -shadow_offset), (shadow_offset, shadow_offset),
+               (-shadow_offset, shadow_offset), (shadow_offset, -shadow_offset)]:
+             draw.text((text_x + dx, text_y + dy), new_text, font=font, fill="black")
+
+            # Draw main text in white (on top)
+             draw.text((text_x, text_y), new_text, font=font, fill="white")
 
             found = True
             break
