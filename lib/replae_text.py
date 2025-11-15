@@ -14,7 +14,7 @@ rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 results = pytesseract.image_to_data(rgb, output_type=pytesseract.Output.DICT)
 
 # Word to replace
-old_text = "www.reallygreatsite.com"
+old_text = "Student"
 new_text = "Amit Shukla"
 
 # # Loop through OCR results

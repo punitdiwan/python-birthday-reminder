@@ -63,7 +63,7 @@ async def _get_photos(school_id: str = Form(...)) -> dict:
 
 # API endpoint to replace circle in image
 @app.post("/replace-circle/")
-async def replace_circle_api(school_id: str = Form(...),  poster: UploadFile = File(...), old_text:str = Form("www.reallygreatsite.com")) -> dict:
+async def replace_circle_api(school_id: str = Form(...),  poster: UploadFile = File(...), old_text:str = Form("Student")) -> dict:
     logger.info(f"Received request with school_id: {school_id}, old_text: {old_text}")
     
     reset_output_folder(OUTPUT_DIR)
@@ -148,7 +148,7 @@ if __name__ == "__main__":
                 f"uploads/{student['photo']}",
                 poster_path,
                 "outputs",
-                "www.reallygreatsite.com",
+                "Student",
                 capitalize_name(student['full_name'])
             )
             print(f"✅ Poster generated: {result}")
