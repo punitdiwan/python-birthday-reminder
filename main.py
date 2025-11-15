@@ -11,6 +11,16 @@ from lib.facebook_utils import get_page_access_token
 # Load variables from .env file into environment
 load_dotenv()
 
+
+from pathlib import Path
+import os
+
+env_path = Path(__file__).resolve().parent / ".env"
+load_dotenv(dotenv_path=env_path)
+
+print("Loaded ACCESS_TOKEN =", os.getenv("ACCESS_TOKEN"))
+
+
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -113,7 +123,6 @@ if __name__ == "__main__":
     from lib.process_imag import replace_circle, capitalize_name, post_on_facebook
     from lib.db_manager import execute_query
     from lib.facebook_utils import get_page_access_token   
-    from dotenv import load_dotenv
     load_dotenv()   # <-- add this
 
     parser = argparse.ArgumentParser()
