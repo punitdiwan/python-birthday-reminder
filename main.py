@@ -113,6 +113,8 @@ if __name__ == "__main__":
     from lib.process_imag import replace_circle, capitalize_name, post_on_facebook
     from lib.db_manager import execute_query
     from lib.facebook_utils import get_page_access_token   
+    from dotenv import load_dotenv
+    load_dotenv()   # <-- add this
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--run_birthday_pipeline", action="store_true")
