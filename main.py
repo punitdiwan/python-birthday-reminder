@@ -6,7 +6,7 @@ import shutil
 from lib.process_imag import replace_circle, capitalize_name, post_on_facebook, reset_output_folder 
 from lib.db_manager import execute_query
 from dotenv import load_dotenv
-from lib.facebook_utils import get_page_access_token, school_has_facebook_page
+from lib.facebook_utils import get_page_access_token
 
 # Load variables from .env file into environment
 load_dotenv()
@@ -53,23 +53,10 @@ def fetch_and_store_pages(user_access_token: str, output_file="fb_pages.json"):
 async def _get_photos(school_id: str = Form(...)) -> dict:
     logger.info(f"Received request with school_id: {school_id}")
 
-    if not school_has_facebook_page(school_id):
-        logger.info(f"Skipping {school_id}: No facebook_page_id configured")
-        return {"output": []}
-
-    # existing code below
-    students = execute_query(
-        f"""select full_name, photo, dob 
-            from {school_id}.students 
-            where is_deleted = false 
-            and length(photo) > 0 
-            and TO_CHAR(CAST(dob AS DATE), 'MM-DD') = TO_CHAR(CURRENT_DATE, 'MM-DD')"""
-    )
-    
+    # fee_categories = execute_query("SELECT _uid, batches, category_name FROM thekatarahillsschool.finance_fee_categories WHERE is_deleted = %s", (False,))  
+    students = execute_query(f"select full_name, photo, dob from {school_id}.students where is_deleted = false and length(photo) > 0 and TO_CHAR(CAST(dob AS DATE), 'MM-DD') = TO_CHAR(CURRENT_DATE, 'MM-DD')")
     for student in students:
-        logger.info(
-            f" Student FullName: {student['full_name']}, Student Photo: {student['photo']}, DOB : {student['dob']}"
-        )
+        logger.info(f" Student FullName: {student['full_name']}, Student Photo: {student['photo']}, DOB : {student['dob']}")
         _downloadPhoto(school_id, student['photo'])
 
     return {"output": students}
@@ -125,6 +112,7 @@ if __name__ == "__main__":
     import argparse
     from lib.process_imag import replace_circle, capitalize_name, post_on_facebook
     from lib.db_manager import execute_query
+    from lib.facebook_utils import get_page_access_token   
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--run_birthday_pipeline", action="store_true")
@@ -133,14 +121,25 @@ if __name__ == "__main__":
     if args.run_birthday_pipeline:
         school_id = os.getenv("SCHOOL_ID")
         if not school_id:
-            print("❌ SCHOOL_ID not found in environment.")
+            print("SCHOOL_ID not found in environment.")
             exit(1)
 
-        print(f"🎂 Running birthday poster generator for {school_id}")
+            print(f"Running birthday poster generator for {school_id}")
+
+        # --------------------------------------------------------------
+        # NEW: check facebook_page_id *before* any heavy work
+        # --------------------------------------------------------------
+        try:
+            page_id, _ = get_page_access_token(school_id)   # will raise if missing
+            print(f"Found FB page {page_id} – proceeding")
+        except Exception as e:
+            print(f"Skipping {school_id}: {e}")
+            exit(0)                     # <-- skip this school entirely
+        # --------------------------------------------------------------
 
         reset_output_folder(OUTPUT_DIR)
 
-        # 1️⃣ Fetch students with today's birthday
+        # 1. Fetch students with today's birthday
         students = execute_query(f"""
             SELECT full_name, photo, dob 
             FROM {school_id}.students
@@ -150,12 +149,12 @@ if __name__ == "__main__":
         """)
 
         if not students:
-            print(f"ℹ No birthdays today for {school_id}")
+            print(f"No birthdays today for {school_id}")
             exit(0)
 
         poster_path = "poster_template.jpg"  # ensure template exists
         for student in students:
-            print(f"🎉 {student['full_name']} — {student['dob']}")
+            print(f"{student['full_name']} — {student['dob']}")
             _downloadPhoto(school_id, student['photo'])
             result = replace_circle(
                 f"uploads/{student['photo']}",
@@ -164,14 +163,15 @@ if __name__ == "__main__":
                 "Student",
                 capitalize_name(student['full_name'])
             )
-            print(f"✅ Poster generated: {result}")
-    # Get Page ID & Access Token for this school
+            print(f"Poster generated: {result}")
+
+    # Get Page ID & Access Token for this school (already validated above)
         page_id, access_token = get_page_access_token(school_id)
 
     # Post all generated posters
+        print("Uploading to Facebook...")
         post_on_facebook(output_folder="outputs", school_id=school_id)
 
         # 2️⃣ Post on Facebook
-        print("📤 Uploading to Facebook...")
         # fb_result = post_on_facebook()
         # print(f"📦 Facebook response: {fb_result}")
