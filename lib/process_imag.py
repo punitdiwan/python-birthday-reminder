@@ -137,7 +137,8 @@ def replace_circle(img_path: str,  poster_path: str, output_folder: str, old_tex
 
             # Replace with new text
             try:
-                font = ImageFont.truetype("Roboto-Bold.ttf", 34)
+                font_path = os.path.join(os.path.dirname(__file__), '..', 'assets', 'Roboto-Bold.ttf')
+                font = ImageFont.truetype(font_path, 34)
             except OSError:
                 font = ImageFont.load_default()
 
