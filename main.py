@@ -6,7 +6,7 @@ import shutil
 from lib.process_imag import replace_circle, capitalize_name, post_on_facebook, reset_output_folder 
 from lib.db_manager import execute_query
 from dotenv import load_dotenv
-from lib.facebook_utils import get_page_access_token
+from lib.facebook_utils import get_page_access_token,cleanup_fb_pages
 
 # Load variables from .env file into environment
 load_dotenv()
@@ -175,3 +175,4 @@ if __name__ == "__main__":
         # 2️⃣ Post on Facebook
         # fb_result = post_on_facebook()
         # print(f"📦 Facebook response: {fb_result}")
+        cleanup_fb_pages()          # <--- NEW LINE
