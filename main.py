@@ -17,6 +17,7 @@ import os
 
 env_path = Path(__file__).resolve().parent / ".env"
 load_dotenv(dotenv_path=env_path)
+print("TOKEN:", os.getenv("ACCESS_TOKEN"))
 
 print("Loaded ACCESS_TOKEN =", os.getenv("ACCESS_TOKEN"))
 
