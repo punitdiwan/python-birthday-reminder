@@ -3,7 +3,7 @@ import logging
 import os
 import requests
 import shutil
-from lib.process_imag import replace_circle, capitalize_name, post_on_facebook, reset_output_folder 
+from lib.process_imag import replace_circle, capitalize_name, post_on_facebook, reset_output_folder
 from lib.db_manager import execute_query
 from dotenv import load_dotenv
 from lib.facebook_utils import get_page_access_token
@@ -34,26 +34,10 @@ def _downloadPhoto(school_id:str, photo_id: str):
         logger.error("Failed to download image.")
 
 
-def fetch_and_store_pages(user_access_token: str, output_file="fb_pages.json"):
-    """
-    Fetch all pages the user manages and store the response to a JSON file.
-    This should be done only once (or periodically).
-    """
-    fb_url = f"https://graph.facebook.com/v21.0/me/accounts?access_token={user_access_token}"
-    response = requests.get(fb_url)
-    response.raise_for_status()
-
-    with open(output_file, "w") as f:
-        f.write(response.text)
-
-    print(f"✅ Facebook pages stored in {output_file}")
-    return response.json()
-
-
-async def _get_photos(school_id: str = Form(...)) -> dict:
+async def _get_photos(school_id: str) -> dict:
     logger.info(f"Received request with school_id: {school_id}")
 
-    # fee_categories = execute_query("SELECT _uid, batches, category_name FROM thekatarahillsschool.finance_fee_categories WHERE is_deleted = %s", (False,))  
+    # fee_categories = execute_query("SELECT _uid, batches, category_name FROM thekatarahillsschool.finance_fee_categories WHERE is_deleted = %s", (False,)) 
     students = execute_query(f"select full_name, photo, dob from {school_id}.students where is_deleted = false and length(photo) > 0 and TO_CHAR(CAST(dob AS DATE), 'MM-DD') = TO_CHAR(CURRENT_DATE, 'MM-DD')")
     for student in students:
         logger.info(f" Student FullName: {student['full_name']}, Student Photo: {student['photo']}, DOB : {student['dob']}")
@@ -98,10 +82,14 @@ async def replace_circle_api(school_id: str = Form(...),  poster: UploadFile = F
     return {"output": results}
 
 @app.post("/post-on-facebook/")
-async def post_on_facebook_api() -> dict:
-    logger.info("Received request to post on Facebook")
+async def post_on_facebook_api(school_id: str = Form(...)) -> dict:
+    """
+    API endpoint to post generated images to Facebook for a specific school.
+    """
+    logger.info(f"Received request to post on Facebook for school: {school_id}")
     try:
-        results = post_on_facebook()          # <-- now returns list of dicts
+        # The post_on_facebook function will now handle its own credential fetching
+        results = post_on_facebook(output_folder="outputs", school_id=school_id)
         return {"output": results}
     except Exception as e:
         logger.error(f"Error posting on Facebook: {e}")
@@ -110,9 +98,6 @@ async def post_on_facebook_api() -> dict:
 
 if __name__ == "__main__":
     import argparse
-    from lib.process_imag import replace_circle, capitalize_name, post_on_facebook
-    from lib.db_manager import execute_query
-    from lib.facebook_utils import get_page_access_token   
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--run_birthday_pipeline", action="store_true")
@@ -130,20 +115,20 @@ if __name__ == "__main__":
         # NEW: check facebook_page_id *before* any heavy work
         # --------------------------------------------------------------
         try:
-            page_id, _ = get_page_access_token(school_id)   # will raise if missing
+            page_id, _ = get_page_access_token(school_id)
             print(f"Found FB page {page_id} – proceeding")
         except Exception as e:
             print(f"Skipping {school_id}: {e}")
-            exit(0)                     # <-- skip this school entirely
+            exit(0)
         # --------------------------------------------------------------
 
         reset_output_folder(OUTPUT_DIR)
 
         # 1. Fetch students with today's birthday
         students = execute_query(f"""
-            SELECT full_name, photo, dob 
+            SELECT full_name, photo, dob
             FROM {school_id}.students
-            WHERE is_deleted = false 
+            WHERE is_deleted = false
             AND length(photo) > 0
             AND TO_CHAR(CAST(dob AS DATE), 'MM-DD') = TO_CHAR(CURRENT_DATE, 'MM-DD')
         """)
@@ -152,7 +137,7 @@ if __name__ == "__main__":
             print(f"No birthdays today for {school_id}")
             exit(0)
 
-        poster_path = "poster_template.jpg"  # ensure template exists
+        poster_path = "poster_template.jpg"
         for student in students:
             print(f"{student['full_name']} — {student['dob']}")
             _downloadPhoto(school_id, student['photo'])
@@ -165,10 +150,7 @@ if __name__ == "__main__":
             )
             print(f"Poster generated: {result}")
 
-    # Get Page ID & Access Token for this school (already validated above)
-        page_id, access_token = get_page_access_token(school_id)
-
-    # Post all generated posters
+       # 2. Post all generated posters to Facebook
         print("Uploading to Facebook...")
         post_on_facebook(output_folder="outputs", school_id=school_id)
 
