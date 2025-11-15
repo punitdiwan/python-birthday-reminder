@@ -175,3 +175,5 @@ if __name__ == "__main__":
         # 2️⃣ Post on Facebook
         # fb_result = post_on_facebook()
         # print(f"📦 Facebook response: {fb_result}")
+        from lib.facebook_utils import clear_cached_facebook_pages
+        clear_cached_facebook_pages()
