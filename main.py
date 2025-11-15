@@ -6,7 +6,7 @@ import shutil
 from lib.process_imag import replace_circle, capitalize_name, post_on_facebook, reset_output_folder 
 from lib.db_manager import execute_query
 from dotenv import load_dotenv
-from lib.facebook_utils import get_page_access_token
+from lib.facebook_utils import get_page_access_token, school_has_facebook_page
 
 # Load variables from .env file into environment
 load_dotenv()
@@ -53,10 +53,23 @@ def fetch_and_store_pages(user_access_token: str, output_file="fb_pages.json"):
 async def _get_photos(school_id: str = Form(...)) -> dict:
     logger.info(f"Received request with school_id: {school_id}")
 
-    # fee_categories = execute_query("SELECT _uid, batches, category_name FROM thekatarahillsschool.finance_fee_categories WHERE is_deleted = %s", (False,))  
-    students = execute_query(f"select full_name, photo, dob from {school_id}.students where is_deleted = false and length(photo) > 0 and TO_CHAR(CAST(dob AS DATE), 'MM-DD') = TO_CHAR(CURRENT_DATE, 'MM-DD')")
+    if not school_has_facebook_page(school_id):
+        logger.info(f"Skipping {school_id}: No facebook_page_id configured")
+        return {"output": []}
+
+    # existing code below
+    students = execute_query(
+        f"""select full_name, photo, dob 
+            from {school_id}.students 
+            where is_deleted = false 
+            and length(photo) > 0 
+            and TO_CHAR(CAST(dob AS DATE), 'MM-DD') = TO_CHAR(CURRENT_DATE, 'MM-DD')"""
+    )
+    
     for student in students:
-        logger.info(f" Student FullName: {student['full_name']}, Student Photo: {student['photo']}, DOB : {student['dob']}")
+        logger.info(
+            f" Student FullName: {student['full_name']}, Student Photo: {student['photo']}, DOB : {student['dob']}"
+        )
         _downloadPhoto(school_id, student['photo'])
 
     return {"output": students}

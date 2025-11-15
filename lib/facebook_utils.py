@@ -51,3 +51,18 @@ def get_page_access_token(school_id: str, pages_file="fb_pages.json"):
     print(f"✅ Found Page: {page['name']} ({page['id']})")
 
     return page["id"], page["access_token"]
+
+
+
+def school_has_facebook_page(school_id: str) -> bool:
+    query = """
+        SELECT config_value AS facebook_page_id
+        FROM {0}.configurations
+        WHERE config_key = 'facebook_page_id'
+        AND _school = %s
+        LIMIT 1
+    """.format(school_id)
+
+    result = execute_query(query, (school_id,))
+    return bool(result and result[0]["facebook_page_id"])
+
