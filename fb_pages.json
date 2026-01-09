@@ -396,25 +396,6 @@
                 "ADVERTISE",
                 "CREATE_CONTENT"
             ]
-        },
-        {
-            "access_token": "",
-            "category": "school",
-            "category_list": [
-                {
-                    "id": "2601",
-                    "name": "School"
-                }
-            ],
-            "name": "scholars home school",
-            "id": "61571773104800",
-            "tasks": [
-                "MODERATE",
-                "MESSAGING",
-                "ANALYZE",
-                "ADVERTISE",
-                "CREATE_CONTENT"
-            ]
         }
     ],
     "paging": {
