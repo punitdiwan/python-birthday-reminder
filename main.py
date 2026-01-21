@@ -7,6 +7,8 @@ from lib.process_imag import replace_circle, capitalize_name, post_on_facebook, 
 from lib.db_manager import execute_query
 from dotenv import load_dotenv
 from lib.facebook_utils import get_page_access_token
+import sys
+import json # Add to imports
 
 # Load variables from .env file into environment
 load_dotenv()
@@ -116,62 +118,122 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--run_birthday_pipeline", action="store_true")
+    parser.add_argument("--schools_list", type=str, help="Path to file containing list of school IDs")
     args = parser.parse_args()
 
     if args.run_birthday_pipeline:
-        school_id = os.getenv("SCHOOL_ID")
-        if not school_id:
-            print("SCHOOL_ID not found in environment.")
+        school_list = []
+        if args.schools_list and os.path.exists(args.schools_list):
+            with open(args.schools_list, "r") as f:
+                school_list = [line.strip() for line in f if line.strip()]
+        elif os.getenv("SCHOOL_ID"):
+            school_list = [os.getenv("SCHOOL_ID")]
+        else:
+            print("❌ No schools found. Provide --schools_list.")
             exit(1)
 
-            print(f"Running birthday poster generator for {school_id}")
+        print(f"🚀 Starting pipeline for {len(school_list)} schools...")
 
-        # --------------------------------------------------------------
-        # NEW: check facebook_page_id *before* any heavy work
-        # --------------------------------------------------------------
-        try:
-            page_id, _ = get_page_access_token(school_id)   # will raise if missing
-            print(f"Found FB page {page_id} – proceeding")
-        except Exception as e:
-            print(f"Skipping {school_id}: {e}")
-            exit(0)                     # <-- skip this school entirely
-        # --------------------------------------------------------------
+        # 2. Setup Artifacts Root Directories
+        # We create a main folder that will hold subfolders for each school
+        ARTIFACTS_ROOT = "birthday-posts" 
+        FAILURE_LOG_FILE = "school-failures.json"
+        
+        # Clean start: remove root folder if it exists to prevent old files
+        if os.path.exists(ARTIFACTS_ROOT):
+            shutil.rmtree(ARTIFACTS_ROOT)
+        os.makedirs(ARTIFACTS_ROOT, exist_ok=True)
 
-        reset_output_folder(OUTPUT_DIR)
+        failed_schools = []
+        success_count = 0
 
-        # 1. Fetch students with today's birthday
-        students = execute_query(f"""
-            SELECT full_name, photo, dob 
-            FROM {school_id}.students
-            WHERE is_deleted = false 
-            AND length(photo) > 0
-            AND TO_CHAR(CAST(dob AS DATE), 'MM-DD') = TO_CHAR(CURRENT_DATE, 'MM-DD')
-        """)
+        # 3. Process Loop
+        for school_id in school_list:
+            print("\n" + "="*50)
+            print(f"🏫 Processing school: {school_id}")
+            print("="*50)
 
-        if not students:
-            print(f"No birthdays today for {school_id}")
-            exit(0)
+            # Create a UNIQUE folder for this specific school
+            # Example: birthday-posts/minervaschool/
+            school_output_dir = os.path.join(ARTIFACTS_ROOT, school_id)
+            os.makedirs(school_output_dir, exist_ok=True)
 
-        poster_path = "poster_template.jpg"  # ensure template exists
-        for student in students:
-            print(f"{student['full_name']} — {student['dob']}")
-            _downloadPhoto(school_id, student['photo'])
-            result = replace_circle(
-                f"uploads/{student['photo']}",
-                poster_path,
-                "outputs",
-                "Student",
-                capitalize_name(student['full_name'])
-            )
-            print(f"Poster generated: {result}")
+            failure_record = {"school": school_id, "error": None}
 
-    # Get Page ID & Access Token for this school (already validated above)
-        page_id, access_token = get_page_access_token(school_id)
+            try:
+                # A. Validate Facebook Config
+                try:
+                    page_id, _ = get_page_access_token(school_id)
+                except Exception as e:
+                    print(f"⚠️ Skipping {school_id}: {e}")
+                    # If we skip, we remove the empty folder to keep artifacts clean
+                    os.rmdir(school_output_dir) 
+                    continue 
 
-    # Post all generated posters
-        print("Uploading to Facebook...")
-        post_on_facebook(output_folder="outputs", school_id=school_id)
+                # B. Fetch Students
+                students = execute_query(f"""
+                    SELECT full_name, photo, dob 
+                    FROM {school_id}.students
+                    WHERE is_deleted = false 
+                    AND length(photo) > 0
+                    AND TO_CHAR(CAST(dob AS DATE), 'MM-DD') = TO_CHAR(CURRENT_DATE, 'MM-DD')
+                """)
 
-        # 2️⃣ Post on Facebook
-        # fb_result = post_on_facebook()
-        # print(f"📦 Facebook response: {fb_result}")
+                if not students:
+                    print(f"ℹ️ No birthdays today for {school_id}")
+                    os.rmdir(school_output_dir) # Clean up empty folder
+                    continue
+
+                poster_path = "poster_template.jpg"
+                posters_created = False
+
+                # C. Generate Posters -> INTO UNIQUE SCHOOL FOLDER
+                for student in students:
+                    print(f"🎂 Processing: {student['full_name']}")
+                    try:
+                        _downloadPhoto(school_id, student['photo'])
+                        
+                        # We pass 'school_output_dir' instead of generic 'outputs'
+                        result = replace_circle(
+                            f"uploads/{student['photo']}",
+                            poster_path,
+                            school_output_dir,  # <--- ISOLATION HAPPENS HERE
+                            "Student",
+                            capitalize_name(student['full_name'])
+                        )
+                        print(f"🖼️ Poster generated at: {school_output_dir}")
+                        posters_created = True
+                    except Exception as img_err:
+                        print(f"❌ Image Error ({student['full_name']}): {img_err}")
+
+                # D. Upload -> FROM UNIQUE SCHOOL FOLDER
+                if posters_created:
+                    print(f"📤 Uploading from {school_output_dir} to Facebook...")
+                    
+                    # Ensure the uploader only looks at this school's folder
+                    post_on_facebook(output_folder=school_output_dir, school_id=school_id)
+                    
+                    success_count += 1
+                else:
+                    # If no posters were made (errors), remove folder
+                    if os.path.exists(school_output_dir) and not os.listdir(school_output_dir):
+                         os.rmdir(school_output_dir)
+
+            except Exception as e:
+                logger.error(f"❌ CRITICAL FAILURE for {school_id}: {e}")
+                failure_record["error"] = str(e)
+                failed_schools.append(failure_record)
+
+        # 4. Save Failure Log
+        print("\n" + "#"*50)
+        print(f"🏁 Pipeline Finished.")
+        print(f"✅ Successful: {success_count}")
+        print(f"❌ Failed: {len(failed_schools)}")
+
+        with open(FAILURE_LOG_FILE, "w") as f:
+            json.dump(failed_schools, f, indent=4)
+
+        if failed_schools:
+            sys.exit(1)
+        else:
+            sys.exit(0)
