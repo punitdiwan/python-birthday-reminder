@@ -120,7 +120,9 @@ def replace_circle(img_path: str,  poster_path: str, output_folder: str, old_tex
 
     found = False
     for i, word in enumerate(results["text"]):
-        if word.strip().lower() == old_text.lower():
+        clean_word = word.strip().lower()
+    
+        if old_text.lower() in clean_word:
             x, y, w, h = (
                 results["left"][i],
                 results["top"][i],
