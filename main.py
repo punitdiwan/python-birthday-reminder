@@ -175,8 +175,11 @@ if __name__ == "__main__":
                     SELECT full_name, photo, dob 
                     FROM {school_id}.students
                     WHERE is_deleted = false 
-                    AND length(photo) > 0
-                    AND TO_CHAR(CAST(dob AS DATE), 'MM-DD') = TO_CHAR(CURRENT_DATE, 'MM-DD')
+                      AND photo IS NOT NULL
+                      AND length(photo) > 0
+                      AND dob IS NOT NULL
+                      AND EXTRACT(MONTH FROM dob::date) = EXTRACT(MONTH FROM CURRENT_DATE)
+                      AND EXTRACT(DAY FROM dob::date) = EXTRACT(DAY FROM CURRENT_DATE);
                 """)
 
                 if not students:
