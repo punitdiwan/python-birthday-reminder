@@ -178,6 +178,7 @@ if __name__ == "__main__":
                       AND photo IS NOT NULL
                       AND length(photo) > 0
                       AND dob IS NOT NULL
+                      AND dob <> ''
                       AND EXTRACT(MONTH FROM dob::date) = EXTRACT(MONTH FROM CURRENT_DATE)
                       AND EXTRACT(DAY FROM dob::date) = EXTRACT(DAY FROM CURRENT_DATE);
                 """)
